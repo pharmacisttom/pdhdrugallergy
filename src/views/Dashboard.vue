@@ -4,6 +4,7 @@
       <div class="container-fluid">
         <span class="navbar-brand fw-bold">PDH Drug Allergy</span>
         <div class="d-flex align-items-center gap-3">
+          <span class="badge bg-light text-primary">{{ roleLabel }}</span>
           <span class="text-white small d-none d-md-inline">{{ userEmail }}</span>
           <button class="btn btn-light btn-sm" @click="logout" :disabled="authLoading">Logout</button>
         </div>
@@ -37,6 +38,10 @@
             <div class="fw-semibold mb-1">ยังเชื่อมต่อฐานข้อมูลไม่สำเร็จ</div>
             <div>{{ setupError }}</div>
             <div class="small mt-2">ให้นำไฟล์ <code>supabase/schema.sql</code> ไปรันใน Supabase SQL Editor ก่อนใช้งานหน้านี้</div>
+          </div>
+
+          <div v-if="!isAdmin" class="alert alert-info border-0 shadow-sm">
+            บัญชีนี้เป็นสิทธิ์เจ้าหน้าที่ สามารถบันทึกข้อมูลผู้ป่วยและรายการแพ้ยาได้ แต่การยืนยัน/ยกเลิก/ลบรายการจำกัดเฉพาะแอดมิน
           </div>
 
           <div class="row g-3 mb-4">
@@ -86,8 +91,8 @@
                     <td>{{ record.severity }}</td>
                     <td><span class="badge" :class="statusClass(record.status)">{{ record.status }}</span></td>
                     <td class="text-end">
-                      <button class="btn btn-sm btn-outline-success me-2" @click="reviewAllergy(record, 'ยืนยันแล้ว')" :disabled="record.status === 'ยืนยันแล้ว'">ยืนยัน</button>
-                      <button class="btn btn-sm btn-outline-secondary" @click="reviewAllergy(record, 'ยกเลิก')" :disabled="record.status === 'ยกเลิก'">ยกเลิก</button>
+                      <button class="btn btn-sm btn-outline-success me-2" @click="reviewAllergy(record, 'ยืนยันแล้ว')" :disabled="!isAdmin || record.status === 'ยืนยันแล้ว'">ยืนยัน</button>
+                      <button class="btn btn-sm btn-outline-secondary" @click="reviewAllergy(record, 'ยกเลิก')" :disabled="!isAdmin || record.status === 'ยกเลิก'">ยกเลิก</button>
                     </td>
                   </tr>
                   <tr v-if="recentAllergies.length === 0">
@@ -169,7 +174,7 @@
                         <td>{{ patient.phone || '-' }}</td>
                         <td class="text-end">
                           <button class="btn btn-sm btn-outline-primary me-2" @click="editPatient(patient)">แก้ไข</button>
-                          <button class="btn btn-sm btn-outline-danger" @click="deletePatient(patient)">ลบ</button>
+                          <button class="btn btn-sm btn-outline-danger" @click="deletePatient(patient)" :disabled="!isAdmin">ลบ</button>
                         </td>
                       </tr>
                       <tr v-if="filteredPatients.length === 0">
@@ -268,8 +273,8 @@
                         <td>{{ record.severity }}</td>
                         <td><span class="badge" :class="statusClass(record.status)">{{ record.status }}</span></td>
                         <td class="text-end">
-                          <button class="btn btn-sm btn-outline-success me-2" @click="reviewAllergy(record, 'ยืนยันแล้ว')">ยืนยัน</button>
-                          <button class="btn btn-sm btn-outline-danger" @click="deleteAllergy(record)">ลบ</button>
+                          <button class="btn btn-sm btn-outline-success me-2" @click="reviewAllergy(record, 'ยืนยันแล้ว')" :disabled="!isAdmin">ยืนยัน</button>
+                          <button class="btn btn-sm btn-outline-danger" @click="deleteAllergy(record)" :disabled="!isAdmin">ลบ</button>
                         </td>
                       </tr>
                       <tr v-if="filteredAllergies.length === 0">
@@ -297,6 +302,7 @@ const router = useRouter()
 const activeTab = ref('overview')
 const userEmail = ref('')
 const userId = ref('')
+const userRole = ref('staff')
 const authLoading = ref(false)
 const dataLoading = ref(false)
 const setupError = ref('')
@@ -306,6 +312,9 @@ const allergies = ref([])
 
 const patientForm = reactive(emptyPatient())
 const allergyForm = reactive(emptyAllergy())
+
+const isAdmin = computed(() => userRole.value === 'admin')
+const roleLabel = computed(() => (isAdmin.value ? 'Admin' : 'Staff'))
 
 const summaryCards = computed(() => [
   { label: 'ผู้ป่วยทั้งหมด', value: patients.value.length.toLocaleString('th-TH'), short: 'PT' },
@@ -346,6 +355,7 @@ onMounted(async () => {
   const { data } = await supabase.auth.getUser()
   userEmail.value = data.user?.email || '-'
   userId.value = data.user?.id || ''
+  await loadProfile()
   await loadData()
 })
 
@@ -373,6 +383,27 @@ function emptyAllergy() {
     source: '',
     note: ''
   }
+}
+
+async function loadProfile() {
+  if (!userId.value) return
+
+  const { data, error } = await supabase
+    .from('user_profiles')
+    .select('role')
+    .eq('id', userId.value)
+    .maybeSingle()
+
+  if (!error && data?.role) {
+    userRole.value = data.role
+    return
+  }
+
+  await supabase.from('user_profiles').upsert({
+    id: userId.value,
+    email: userEmail.value,
+    role: 'staff'
+  })
 }
 
 async function loadData() {
@@ -446,6 +477,8 @@ function editPatient(patient) {
 }
 
 async function deletePatient(patient) {
+  if (!isAdmin.value) return
+
   const result = await Swal.fire({
     icon: 'warning',
     title: 'ลบข้อมูลผู้ป่วย?',
@@ -497,6 +530,8 @@ async function saveAllergy() {
 }
 
 async function reviewAllergy(record, status) {
+  if (!isAdmin.value) return
+
   const { error } = await supabase
     .from('drug_allergies')
     .update({
@@ -515,6 +550,8 @@ async function reviewAllergy(record, status) {
 }
 
 async function deleteAllergy(record) {
+  if (!isAdmin.value) return
+
   const result = await Swal.fire({
     icon: 'warning',
     title: 'ลบรายการแพ้ยา?',
