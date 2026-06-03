@@ -557,13 +557,13 @@ import { supabase } from '../services/supabase'
 
 const router = useRouter()
 const tabs = [
-  { key: 'overview', label: 'Dashboard' },
-  { key: 'network', label: 'Network' },
-  { key: 'patients', label: 'Patients' },
-  { key: 'allergies', label: 'Suspected Allergy' },
-  { key: 'exchange', label: 'Import/Export' },
-  { key: 'cards', label: 'Allergy Card' },
-  { key: 'users', label: 'Users', adminOnly: true }
+  { key: 'overview', label: 'หน้าหลัก' },
+  { key: 'network', label: 'เครือข่าย รพ.สต.' },
+  { key: 'patients', label: 'ทะเบียนผู้ป่วย' },
+  { key: 'allergies', label: 'บันทึกสงสัยแพ้ยา' },
+  { key: 'exchange', label: 'นำเข้า/ส่งออกไฟล์' },
+  { key: 'cards', label: 'ออกบัตรแพ้ยา' },
+  { key: 'users', label: 'กำหนดสิทธิ์ผู้ใช้', adminOnly: true }
 ]
 
 const activeTab = ref('overview')
