@@ -23,9 +23,14 @@
                     <input v-model.trim="email" type="email" class="form-control form-control-lg" autocomplete="email" required>
                   </div>
 
-                  <div class="col-12">
-                    <label class="form-label">หน่วยงาน</label>
-                    <input v-model.trim="organization" type="text" class="form-control form-control-lg" placeholder="เช่น โรงพยาบาลปลวกแดง" required>
+                  <div class="col-md-5">
+                    <label class="form-label">HOSPCODE</label>
+                    <input v-model.trim="hospcode" type="text" class="form-control form-control-lg" placeholder="รหัสหน่วยบริการ">
+                  </div>
+
+                  <div class="col-md-7">
+                    <label class="form-label">หน่วยงาน/รพ.สต.</label>
+                    <input v-model.trim="organization" type="text" class="form-control form-control-lg" placeholder="เช่น รพ.สต.บ้าน..." required>
                   </div>
 
                   <div class="col-md-6">
@@ -66,6 +71,7 @@ import { supabase } from '../services/supabase'
 const router = useRouter()
 const fullname = ref('')
 const email = ref('')
+const hospcode = ref('')
 const organization = ref('')
 const password = ref('')
 const confirmPassword = ref('')
@@ -90,7 +96,8 @@ async function register() {
     options: {
       data: {
         fullname: fullname.value,
-        organization: organization.value
+        organization: organization.value,
+        hospcode: hospcode.value
       }
     }
   })
@@ -105,7 +112,7 @@ async function register() {
   await Swal.fire({
     icon: 'success',
     title: 'สมัครสมาชิกสำเร็จ',
-    text: 'กรุณาเข้าสู่ระบบด้วยบัญชีที่สมัครไว้',
+    text: 'กรุณายืนยันอีเมล จากนั้นรอแอดมินอนุมัติสิทธิ์และผูกกับ รพ.สต.',
     confirmButtonText: 'ตกลง'
   })
 
