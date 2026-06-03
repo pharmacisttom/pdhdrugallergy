@@ -74,6 +74,10 @@
                 ส่งอีเมลยืนยันอีกครั้ง
               </button>
 
+              <button v-if="!otpStep" class="btn btn-link w-100 text-decoration-none" type="button" @click="continueOtpStep" :disabled="loading || !email">
+                มีรหัส OTP แล้ว
+              </button>
+
               <div class="text-center mt-3">
                 <span class="text-muted">ยังไม่มีบัญชี?</span>
                 <RouterLink class="fw-semibold text-decoration-none ms-1" to="/register">สมัครสมาชิก</RouterLink>
@@ -87,7 +91,7 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import Swal from 'sweetalert2'
 import { supabase } from '../services/supabase'
@@ -99,6 +103,14 @@ const otpCode = ref('')
 const otpStep = ref(false)
 const pdpaAccepted = ref(false)
 const loading = ref(false)
+
+onMounted(() => {
+  const pendingEmail = sessionStorage.getItem('pendingOtpEmail')
+  if (pendingEmail) {
+    email.value = pendingEmail
+    otpStep.value = true
+  }
+})
 
 async function login() {
   if (!email.value || !password.value) {
@@ -130,6 +142,7 @@ async function login() {
 
   if (!otpSent) return
 
+  sessionStorage.setItem('pendingOtpEmail', email.value)
   password.value = ''
   otpCode.value = ''
   otpStep.value = true
@@ -149,9 +162,11 @@ async function sendLoginOtp(showSuccess = true) {
   })
 
   if (error) {
-    Swal.fire('ส่งรหัส OTP ไม่สำเร็จ', error.message, 'error')
+    Swal.fire('ส่งรหัส OTP ไม่สำเร็จ', `${error.message}\n\nหากคุณมีรหัสในอีเมลอยู่แล้ว ให้กด "มีรหัส OTP แล้ว" แล้วกรอกรหัสเดิมได้เลย`, 'error')
     return false
   }
+
+  sessionStorage.setItem('pendingOtpEmail', email.value)
 
   if (showSuccess) {
     Swal.fire('ส่งรหัสแล้ว', 'กรุณาตรวจสอบอีเมลเพื่อรับรหัส OTP', 'success')
@@ -183,6 +198,7 @@ async function verifyEmailOtp() {
 
   localStorage.setItem('pdpaAcceptedAt', new Date().toISOString())
   localStorage.setItem('emailOtpVerifiedAt', new Date().toISOString())
+  sessionStorage.removeItem('pendingOtpEmail')
 
   await Swal.fire({
     icon: 'success',
@@ -196,6 +212,18 @@ async function verifyEmailOtp() {
 
 function resetOtpStep() {
   otpStep.value = false
+  otpCode.value = ''
+  sessionStorage.removeItem('pendingOtpEmail')
+}
+
+function continueOtpStep() {
+  if (!email.value) {
+    Swal.fire('แจ้งเตือน', 'กรุณากรอก Email ก่อนเข้าสู่หน้ากรอก OTP', 'warning')
+    return
+  }
+
+  sessionStorage.setItem('pendingOtpEmail', email.value)
+  otpStep.value = true
   otpCode.value = ''
 }
 
