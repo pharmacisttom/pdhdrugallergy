@@ -28,7 +28,11 @@
                 </button>
               </form>
 
-              <div class="text-center mt-4">
+              <button class="btn btn-link w-100 mt-3 text-decoration-none" type="button" @click="resendConfirmation" :disabled="loading || !email">
+                ส่งอีเมลยืนยันอีกครั้ง
+              </button>
+
+              <div class="text-center mt-3">
                 <span class="text-muted">ยังไม่มีบัญชี?</span>
                 <RouterLink class="fw-semibold text-decoration-none ms-1" to="/register">สมัครสมาชิก</RouterLink>
               </div>
@@ -67,6 +71,22 @@ async function login() {
   loading.value = false
 
   if (error) {
+    if (error.message === 'Email not confirmed') {
+      const result = await Swal.fire({
+        icon: 'warning',
+        title: 'ยังไม่ได้ยืนยันอีเมล',
+        text: 'กรุณาตรวจสอบอีเมลและกดลิงก์ยืนยันก่อนเข้าสู่ระบบ',
+        showCancelButton: true,
+        confirmButtonText: 'ส่งอีเมลยืนยันอีกครั้ง',
+        cancelButtonText: 'ปิด'
+      })
+
+      if (result.isConfirmed) {
+        await resendConfirmation()
+      }
+      return
+    }
+
     Swal.fire('เข้าสู่ระบบไม่สำเร็จ', error.message, 'error')
     return
   }
@@ -79,6 +99,27 @@ async function login() {
   })
 
   router.push('/dashboard')
+}
+
+async function resendConfirmation() {
+  if (!email.value) {
+    Swal.fire('แจ้งเตือน', 'กรุณากรอก Email ก่อนส่งอีเมลยืนยัน', 'warning')
+    return
+  }
+
+  loading.value = true
+  const { error } = await supabase.auth.resend({
+    type: 'signup',
+    email: email.value
+  })
+  loading.value = false
+
+  if (error) {
+    Swal.fire('ส่งอีเมลยืนยันไม่สำเร็จ', error.message, 'error')
+    return
+  }
+
+  Swal.fire('ส่งอีเมลแล้ว', 'กรุณาตรวจสอบ Inbox หรือ Spam แล้วกดลิงก์ยืนยันอีเมล', 'success')
 }
 </script>
 
