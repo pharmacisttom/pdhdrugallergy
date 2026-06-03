@@ -51,6 +51,7 @@ create table if not exists public.drug_allergies (
   onset_date date,
   source text,
   note text,
+  photo_paths jsonb not null default '[]'::jsonb,
   typedx text,
   informant text,
   informhosp text,
@@ -79,6 +80,11 @@ alter table public.drug_allergies add column if not exists typedx text;
 alter table public.drug_allergies add column if not exists informant text;
 alter table public.drug_allergies add column if not exists informhosp text;
 alter table public.drug_allergies add column if not exists risk text;
+alter table public.drug_allergies add column if not exists photo_paths jsonb not null default '[]'::jsonb;
+
+insert into storage.buckets (id, name, public)
+values ('allergy-photos', 'allergy-photos', true)
+on conflict (id) do update set public = true;
 
 do $$
 declare constraint_name text;
@@ -271,3 +277,28 @@ create policy "Admins can delete allergy records"
 on public.drug_allergies for delete
 to authenticated
 using (public.is_admin());
+
+drop policy if exists "Authenticated users can read allergy photos" on storage.objects;
+create policy "Authenticated users can read allergy photos"
+on storage.objects for select
+to authenticated
+using (bucket_id = 'allergy-photos');
+
+drop policy if exists "Authenticated users can upload allergy photos" on storage.objects;
+create policy "Authenticated users can upload allergy photos"
+on storage.objects for insert
+to authenticated
+with check (bucket_id = 'allergy-photos');
+
+drop policy if exists "Authenticated users can update allergy photos" on storage.objects;
+create policy "Authenticated users can update allergy photos"
+on storage.objects for update
+to authenticated
+using (bucket_id = 'allergy-photos')
+with check (bucket_id = 'allergy-photos');
+
+drop policy if exists "Admins can delete allergy photos" on storage.objects;
+create policy "Admins can delete allergy photos"
+on storage.objects for delete
+to authenticated
+using (bucket_id = 'allergy-photos' and public.is_admin());

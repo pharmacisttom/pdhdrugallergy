@@ -92,6 +92,7 @@
                     <td>{{ record.reaction }}</td>
                     <td><span class="badge" :class="statusClass(record.status)">{{ record.status }}</span></td>
                     <td class="text-end">
+                      <button class="btn btn-sm btn-outline-primary me-2" @click="viewPhotos(record)" :disabled="photoCount(record) === 0">รูป {{ photoCount(record) }}</button>
                       <button class="btn btn-sm btn-outline-success me-2" @click="reviewAllergy(record, 'ยืนยันแล้ว')" :disabled="!isAdmin || record.status === 'ยืนยันแล้ว'">ยืนยัน</button>
                       <button class="btn btn-sm btn-outline-secondary" @click="reviewAllergy(record, 'ยกเลิก')" :disabled="!isAdmin || record.status === 'ยกเลิก'">ยกเลิก</button>
                     </td>
@@ -477,6 +478,17 @@
                     <label class="form-label">แหล่งข้อมูล</label>
                     <input v-model.trim="allergyForm.source" class="form-control" placeholder="เช่น รพ.สต. / OPD">
                   </div>
+                  <div class="col-12">
+                    <label class="form-label">รูปประกอบการประเมินแพ้ยา (สูงสุด 5 รูป)</label>
+                    <input class="form-control" type="file" accept="image/*" multiple @change="handleAllergyPhotos">
+                    <div class="small text-muted mt-1">ควรถ่ายผื่น/รอยโรค มุมใกล้ มุมกว้าง ยาที่สงสัย ฉลากยา หรือเอกสารประกอบ เพื่อให้เภสัชกรประเมินได้ง่ายขึ้น</div>
+                    <div v-if="allergyPhotoFiles.length" class="photo-preview-row mt-2">
+                      <div v-for="file in allergyPhotoFiles" :key="file.name" class="photo-preview">
+                        <img :src="photoPreviewUrl(file)" alt="preview">
+                        <span>{{ file.name }}</span>
+                      </div>
+                    </div>
+                  </div>
                   <div class="col-12 d-flex gap-2">
                     <button class="btn btn-primary" type="submit" :disabled="!canWrite || dataLoading">บันทึกสงสัยแพ้ยา</button>
                     <button class="btn btn-outline-secondary" type="button" @click="resetAllergyForm">ล้างฟอร์ม</button>
@@ -515,6 +527,7 @@
                         <td>{{ record.reaction }}</td>
                         <td><span class="badge" :class="statusClass(record.status)">{{ record.status }}</span></td>
                         <td class="text-end">
+                          <button class="btn btn-sm btn-outline-primary me-2" @click="viewPhotos(record)" :disabled="photoCount(record) === 0">รูป {{ photoCount(record) }}</button>
                           <button class="btn btn-sm btn-outline-success me-2" @click="reviewAllergy(record, 'ยืนยันแล้ว')" :disabled="!isAdmin">ยืนยัน</button>
                           <button class="btn btn-sm btn-outline-danger" @click="deleteAllergy(record)" :disabled="!isAdmin">ลบ</button>
                         </td>
@@ -573,6 +586,7 @@ const importPreview = ref([])
 const selectedCardAllergyId = ref('')
 const selectedCard = ref(null)
 const cardQr = ref('')
+const allergyPhotoFiles = ref([])
 
 const patientForm = reactive(emptyPatient())
 const allergyForm = reactive(emptyAllergy())
@@ -876,21 +890,111 @@ async function deletePatient(patient) {
 
 async function saveAllergy() {
   if (!canWrite.value) return
+  dataLoading.value = true
+  const photoPaths = await uploadAllergyPhotos()
   const { error } = await supabase.from('drug_allergies').insert({
     patient_id: allergyForm.patient_id,
     drug_name: allergyForm.drug_name,
     reaction: allergyForm.reaction,
     severity: allergyForm.severity,
     source: allergyForm.source || orgName(userHospcode.value),
+    photo_paths: photoPaths,
     status: 'รออนุมัติ',
     created_by: userId.value || null
   })
+  dataLoading.value = false
   if (error) {
     Swal.fire('บันทึกไม่สำเร็จ', error.message, 'error')
     return
   }
   resetAllergyForm()
   await loadData()
+}
+
+function handleAllergyPhotos(event) {
+  const files = Array.from(event.target.files || [])
+  const images = files.filter((file) => file.type.startsWith('image/'))
+
+  if (files.length !== images.length) {
+    Swal.fire('แจ้งเตือน', 'แนบได้เฉพาะไฟล์รูปภาพเท่านั้น', 'warning')
+  }
+
+  if (images.length > 5) {
+    Swal.fire('แจ้งเตือน', 'แนบรูปได้สูงสุด 5 รูปต่อรายการ', 'warning')
+  }
+
+  allergyPhotoFiles.value = images.slice(0, 5)
+}
+
+function photoPreviewUrl(file) {
+  return URL.createObjectURL(file)
+}
+
+async function uploadAllergyPhotos() {
+  if (allergyPhotoFiles.value.length === 0) return []
+
+  const uploaded = []
+  const folder = `${userId.value || 'unknown'}/${Date.now()}`
+
+  for (const [index, file] of allergyPhotoFiles.value.entries()) {
+    const extension = file.name.split('.').pop() || 'jpg'
+    const path = `${folder}/photo-${index + 1}.${extension}`
+    const { error } = await supabase.storage.from('allergy-photos').upload(path, file, {
+      cacheControl: '3600',
+      upsert: false
+    })
+
+    if (error) {
+      Swal.fire('อัปโหลดรูปไม่สำเร็จ', error.message, 'error')
+      continue
+    }
+
+    const { data } = supabase.storage.from('allergy-photos').getPublicUrl(path)
+    uploaded.push({
+      path,
+      url: data.publicUrl,
+      name: file.name,
+      size: file.size
+    })
+  }
+
+  return uploaded
+}
+
+function normalizePhotoPaths(record) {
+  if (!record?.photo_paths) return []
+  if (Array.isArray(record.photo_paths)) return record.photo_paths
+  try {
+    return JSON.parse(record.photo_paths)
+  } catch {
+    return []
+  }
+}
+
+function photoCount(record) {
+  return normalizePhotoPaths(record).length
+}
+
+async function viewPhotos(record) {
+  const photos = normalizePhotoPaths(record)
+  if (photos.length === 0) return
+
+  const html = `
+    <div class="swal-photo-grid">
+      ${photos.map((photo, index) => `
+        <a href="${photo.url}" target="_blank" rel="noreferrer">
+          <img src="${photo.url}" alt="รูปประกอบ ${index + 1}">
+        </a>
+      `).join('')}
+    </div>
+  `
+
+  await Swal.fire({
+    title: 'รูปประกอบการประเมินแพ้ยา',
+    html,
+    width: 900,
+    confirmButtonText: 'ปิด'
+  })
 }
 
 async function readImportFile(event) {
@@ -1001,6 +1105,7 @@ function resetPatientForm() {
 
 function resetAllergyForm() {
   Object.assign(allergyForm, emptyAllergy())
+  allergyPhotoFiles.value = []
 }
 
 function orgName(hospcode) {
@@ -1149,6 +1254,51 @@ async function logout() {
 .qr-code {
   width: 140px;
   height: 140px;
+}
+
+.photo-preview-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 10px;
+}
+
+.photo-preview {
+  border: 1px solid #d9e2ef;
+  border-radius: 8px;
+  padding: 6px;
+  background: #fff;
+}
+
+.photo-preview img {
+  width: 100%;
+  aspect-ratio: 1;
+  object-fit: cover;
+  border-radius: 6px;
+}
+
+.photo-preview span {
+  display: block;
+  margin-top: 4px;
+  font-size: 0.75rem;
+  color: #6c757d;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+:global(.swal-photo-grid) {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+}
+
+:global(.swal-photo-grid img) {
+  width: 100%;
+  max-height: 260px;
+  object-fit: contain;
+  border: 1px solid #d9e2ef;
+  border-radius: 8px;
+  background: #f8fbff;
 }
 
 @media (max-width: 767.98px) {
