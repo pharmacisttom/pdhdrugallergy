@@ -12,12 +12,12 @@
               </div>
 
               <form @submit.prevent="login">
-                <div class="mb-3">
+                <div class="mb-3 text-start">
                   <label class="form-label">Email</label>
                   <input v-model.trim="email" type="email" class="form-control form-control-lg" autocomplete="email" required>
                 </div>
 
-                <div class="mb-4">
+                <div class="mb-4 text-start">
                   <label class="form-label">Password</label>
                   <input v-model="password" type="password" class="form-control form-control-lg" autocomplete="current-password" required>
                 </div>

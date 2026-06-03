@@ -12,9 +12,9 @@
               </div>
 
               <form @submit.prevent="register">
-                <div class="row g-3">
+                <div class="row g-3 text-start">
                   <div class="col-12">
-                    <label class="form-label">Fullname</label>
+                    <label class="form-label">ชื่อ-สกุล</label>
                     <input v-model.trim="fullname" type="text" class="form-control form-control-lg" autocomplete="name" required>
                   </div>
 
@@ -24,7 +24,7 @@
                   </div>
 
                   <div class="col-12">
-                    <label class="form-label">Organization</label>
+                    <label class="form-label">หน่วยงาน</label>
                     <input v-model.trim="organization" type="text" class="form-control form-control-lg" placeholder="เช่น โรงพยาบาลปลวกแดง" required>
                   </div>
 

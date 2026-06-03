@@ -1,0 +1,111 @@
+create extension if not exists pgcrypto;
+
+create table if not exists public.patients (
+  id uuid primary key default gen_random_uuid(),
+  hn text not null unique,
+  cid text,
+  full_name text not null,
+  birth_date date,
+  sex text check (sex in ('ชาย', 'หญิง', 'ไม่ระบุ')) default 'ไม่ระบุ',
+  phone text,
+  address text,
+  created_by uuid references auth.users(id) on delete set null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists public.drug_allergies (
+  id uuid primary key default gen_random_uuid(),
+  patient_id uuid not null references public.patients(id) on delete cascade,
+  drug_name text not null,
+  generic_name text,
+  reaction text not null,
+  severity text check (severity in ('ไม่รุนแรง', 'ปานกลาง', 'รุนแรง', 'ไม่ระบุ')) default 'ไม่ระบุ',
+  onset_date date,
+  source text,
+  note text,
+  status text check (status in ('รออนุมัติ', 'ยืนยันแล้ว', 'ยกเลิก')) default 'รออนุมัติ',
+  created_by uuid references auth.users(id) on delete set null,
+  reviewed_by uuid references auth.users(id) on delete set null,
+  reviewed_at timestamptz,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create index if not exists patients_hn_idx on public.patients (hn);
+create index if not exists patients_full_name_idx on public.patients (full_name);
+create index if not exists drug_allergies_patient_id_idx on public.drug_allergies (patient_id);
+create index if not exists drug_allergies_status_idx on public.drug_allergies (status);
+
+create or replace function public.set_updated_at()
+returns trigger
+language plpgsql
+as $$
+begin
+  new.updated_at = now();
+  return new;
+end;
+$$;
+
+drop trigger if exists set_patients_updated_at on public.patients;
+create trigger set_patients_updated_at
+before update on public.patients
+for each row execute function public.set_updated_at();
+
+drop trigger if exists set_drug_allergies_updated_at on public.drug_allergies;
+create trigger set_drug_allergies_updated_at
+before update on public.drug_allergies
+for each row execute function public.set_updated_at();
+
+alter table public.patients enable row level security;
+alter table public.drug_allergies enable row level security;
+
+drop policy if exists "Authenticated users can read patients" on public.patients;
+create policy "Authenticated users can read patients"
+on public.patients for select
+to authenticated
+using (true);
+
+drop policy if exists "Authenticated users can insert patients" on public.patients;
+create policy "Authenticated users can insert patients"
+on public.patients for insert
+to authenticated
+with check (true);
+
+drop policy if exists "Authenticated users can update patients" on public.patients;
+create policy "Authenticated users can update patients"
+on public.patients for update
+to authenticated
+using (true)
+with check (true);
+
+drop policy if exists "Authenticated users can delete patients" on public.patients;
+create policy "Authenticated users can delete patients"
+on public.patients for delete
+to authenticated
+using (true);
+
+drop policy if exists "Authenticated users can read allergy records" on public.drug_allergies;
+create policy "Authenticated users can read allergy records"
+on public.drug_allergies for select
+to authenticated
+using (true);
+
+drop policy if exists "Authenticated users can insert allergy records" on public.drug_allergies;
+create policy "Authenticated users can insert allergy records"
+on public.drug_allergies for insert
+to authenticated
+with check (true);
+
+drop policy if exists "Authenticated users can update allergy records" on public.drug_allergies;
+create policy "Authenticated users can update allergy records"
+on public.drug_allergies for update
+to authenticated
+using (true)
+with check (true);
+
+drop policy if exists "Authenticated users can delete allergy records" on public.drug_allergies;
+create policy "Authenticated users can delete allergy records"
+on public.drug_allergies for delete
+to authenticated
+using (true);
