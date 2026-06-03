@@ -14,14 +14,14 @@
               <div class="pdpa-notice border bg-light p-3 mb-4">
                 <div class="fw-bold text-danger mb-1">ประกาศคุ้มครองข้อมูลส่วนบุคคลและความลับผู้ป่วย</div>
                 <div class="small text-muted">
-                  ระบบนี้มีข้อมูลสุขภาพและข้อมูลแพ้ยาซึ่งเป็นข้อมูลอ่อนไหวตามกฎหมายคุ้มครองข้อมูลส่วนบุคคล ผู้ใช้งานต้องเข้าถึง ใช้ เปิดเผย หรือส่งต่อข้อมูลเฉพาะเท่าที่จำเป็นต่อการดูแลรักษาและงานบริการสุขภาพเท่านั้น
+                  ระบบนี้มีข้อมูลสุขภาพและข้อมูลแพ้ยาซึ่งเป็นข้อมูลอ่อนไหว ผู้ใช้งานต้องใช้ข้อมูลเฉพาะเท่าที่จำเป็นต่อการดูแลรักษาและงานบริการสุขภาพเท่านั้น
                 </div>
                 <button class="btn btn-link btn-sm p-0 mt-2 text-decoration-none" type="button" @click="showPdpaNotice">
                   อ่านรายละเอียดการใช้งานตาม PDPA
                 </button>
               </div>
 
-              <form @submit.prevent="login">
+              <form v-if="!otpStep" @submit.prevent="login">
                 <div class="mb-3 text-start">
                   <label class="form-label">Email</label>
                   <input v-model.trim="email" type="email" class="form-control form-control-lg" autocomplete="email" required>
@@ -45,7 +45,32 @@
                 </button>
               </form>
 
-              <button class="btn btn-link w-100 mt-3 text-decoration-none" type="button" @click="resendConfirmation" :disabled="loading || !email">
+              <form v-else @submit.prevent="verifyEmailOtp">
+                <div class="alert alert-primary small">
+                  ส่งรหัส OTP ไปที่ <strong>{{ email }}</strong> แล้ว กรุณาตรวจสอบ Inbox หรือ Spam
+                </div>
+
+                <div class="mb-3 text-start">
+                  <label class="form-label">รหัส OTP 6 หลัก</label>
+                  <input v-model.trim="otpCode" inputmode="numeric" maxlength="6" class="form-control form-control-lg text-center otp-input" autocomplete="one-time-code" required>
+                </div>
+
+                <button class="btn btn-primary btn-lg w-100" type="submit" :disabled="loading || otpCode.length < 6">
+                  <span v-if="loading" class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>
+                  ยืนยันรหัสและเข้าใช้งาน
+                </button>
+
+                <div class="d-flex justify-content-between gap-2 mt-3">
+                  <button class="btn btn-link text-decoration-none px-0" type="button" @click="sendLoginOtp" :disabled="loading">
+                    ส่งรหัสใหม่
+                  </button>
+                  <button class="btn btn-link text-decoration-none px-0 text-muted" type="button" @click="resetOtpStep" :disabled="loading">
+                    กลับไปกรอกรหัสผ่าน
+                  </button>
+                </div>
+              </form>
+
+              <button v-if="!otpStep" class="btn btn-link w-100 mt-3 text-decoration-none" type="button" @click="resendConfirmation" :disabled="loading || !email">
                 ส่งอีเมลยืนยันอีกครั้ง
               </button>
 
@@ -70,6 +95,8 @@ import { supabase } from '../services/supabase'
 const router = useRouter()
 const email = ref('')
 const password = ref('')
+const otpCode = ref('')
+const otpStep = ref(false)
 const pdpaAccepted = ref(false)
 const loading = ref(false)
 
@@ -91,39 +118,105 @@ async function login() {
     password: password.value
   })
 
+  if (error) {
+    loading.value = false
+    await handleLoginError(error)
+    return
+  }
+
+  await supabase.auth.signOut()
+  const otpSent = await sendLoginOtp(false)
+  loading.value = false
+
+  if (!otpSent) return
+
+  password.value = ''
+  otpCode.value = ''
+  otpStep.value = true
+}
+
+async function sendLoginOtp(showSuccess = true) {
+  if (!email.value) {
+    Swal.fire('แจ้งเตือน', 'กรุณากรอก Email ก่อนส่งรหัส OTP', 'warning')
+    return false
+  }
+
+  const { error } = await supabase.auth.signInWithOtp({
+    email: email.value,
+    options: {
+      shouldCreateUser: false
+    }
+  })
+
+  if (error) {
+    Swal.fire('ส่งรหัส OTP ไม่สำเร็จ', error.message, 'error')
+    return false
+  }
+
+  if (showSuccess) {
+    Swal.fire('ส่งรหัสแล้ว', 'กรุณาตรวจสอบอีเมลเพื่อรับรหัส OTP', 'success')
+  }
+
+  return true
+}
+
+async function verifyEmailOtp() {
+  if (!otpCode.value || otpCode.value.length < 6) {
+    Swal.fire('แจ้งเตือน', 'กรุณากรอกรหัส OTP 6 หลัก', 'warning')
+    return
+  }
+
+  loading.value = true
+
+  const { error } = await supabase.auth.verifyOtp({
+    email: email.value,
+    token: otpCode.value,
+    type: 'email'
+  })
+
   loading.value = false
 
   if (error) {
-    if (error.message === 'Email not confirmed') {
-      const result = await Swal.fire({
-        icon: 'warning',
-        title: 'ยังไม่ได้ยืนยันอีเมล',
-        text: 'กรุณาตรวจสอบอีเมลและกดลิงก์ยืนยันก่อนเข้าสู่ระบบ',
-        showCancelButton: true,
-        confirmButtonText: 'ส่งอีเมลยืนยันอีกครั้ง',
-        cancelButtonText: 'ปิด'
-      })
-
-      if (result.isConfirmed) {
-        await resendConfirmation()
-      }
-      return
-    }
-
-    Swal.fire('เข้าสู่ระบบไม่สำเร็จ', error.message, 'error')
+    Swal.fire('ยืนยัน OTP ไม่สำเร็จ', error.message, 'error')
     return
   }
 
   localStorage.setItem('pdpaAcceptedAt', new Date().toISOString())
+  localStorage.setItem('emailOtpVerifiedAt', new Date().toISOString())
 
   await Swal.fire({
     icon: 'success',
-    title: 'เข้าสู่ระบบสำเร็จ',
+    title: 'ยืนยันตัวตนสำเร็จ',
     timer: 1200,
     showConfirmButton: false
   })
 
   router.push('/dashboard')
+}
+
+function resetOtpStep() {
+  otpStep.value = false
+  otpCode.value = ''
+}
+
+async function handleLoginError(error) {
+  if (error.message === 'Email not confirmed') {
+    const result = await Swal.fire({
+      icon: 'warning',
+      title: 'ยังไม่ได้ยืนยันอีเมล',
+      text: 'กรุณาตรวจสอบอีเมลและกดลิงก์ยืนยันก่อนเข้าสู่ระบบ',
+      showCancelButton: true,
+      confirmButtonText: 'ส่งอีเมลยืนยันอีกครั้ง',
+      cancelButtonText: 'ปิด'
+    })
+
+    if (result.isConfirmed) {
+      await resendConfirmation()
+    }
+    return
+  }
+
+  Swal.fire('เข้าสู่ระบบไม่สำเร็จ', error.message, 'error')
 }
 
 async function resendConfirmation() {
@@ -186,6 +279,12 @@ function showPdpaNotice() {
 .auth-card,
 .pdpa-notice {
   border-radius: 8px;
+}
+
+.otp-input {
+  font-size: 1.6rem;
+  letter-spacing: 0.35rem;
+  font-weight: 700;
 }
 
 .brand-mark {

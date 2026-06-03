@@ -1187,6 +1187,7 @@ function printCard() {
 async function logout() {
   authLoading.value = true
   await supabase.from('user_profiles').update({ status: 'offline', last_seen_at: new Date().toISOString() }).eq('id', userId.value)
+  localStorage.removeItem('emailOtpVerifiedAt')
   const { error } = await supabase.auth.signOut()
   authLoading.value = false
 
