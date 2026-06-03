@@ -51,11 +51,11 @@
                 </div>
 
                 <div class="mb-3 text-start">
-                  <label class="form-label">รหัส OTP 6 หลัก</label>
-                  <input v-model.trim="otpCode" inputmode="numeric" maxlength="6" class="form-control form-control-lg text-center otp-input" autocomplete="one-time-code" required>
+                  <label class="form-label">รหัส OTP 8 หลัก</label>
+                  <input v-model.trim="otpCode" inputmode="numeric" maxlength="8" class="form-control form-control-lg text-center otp-input" autocomplete="one-time-code" required>
                 </div>
 
-                <button class="btn btn-primary btn-lg w-100" type="submit" :disabled="loading || otpCode.length < 6">
+                <button class="btn btn-primary btn-lg w-100" type="submit" :disabled="loading || otpCode.length < 8">
                   <span v-if="loading" class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>
                   ยืนยันรหัสและเข้าใช้งาน
                 </button>
@@ -161,8 +161,8 @@ async function sendLoginOtp(showSuccess = true) {
 }
 
 async function verifyEmailOtp() {
-  if (!otpCode.value || otpCode.value.length < 6) {
-    Swal.fire('แจ้งเตือน', 'กรุณากรอกรหัส OTP 6 หลัก', 'warning')
+  if (!otpCode.value || otpCode.value.length < 8) {
+    Swal.fire('แจ้งเตือน', 'กรุณากรอกรหัส OTP 8 หลัก', 'warning')
     return
   }
 
